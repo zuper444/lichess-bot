@@ -7,6 +7,7 @@ import os
 import json
 import logging
 import yaml
+import asyncio
 
 ONGOING_GAMES = []
 CONFIG = {}
@@ -19,7 +20,7 @@ def upgrade_account(li):
     return True
 
 
-def start(li, user_profile, engine_path, weights=None, threads=None):
+async def start(li, user_profile, engine_path, weights=None, threads=None):
     # init
     username = user_profile.get("username")
     print("Welcome {}!".format(username))
@@ -44,55 +45,63 @@ def start(li, user_profile, engine_path, weights=None, threads=None):
             if event["type"] == "gameStart":
                 game_id = event["game"]["id"]
                 ONGOING_GAMES.append(game_id)
-                play_game(li, game_id, weights, threads)
+                await play_game(li, game_id, weights, threads)
+                ONGOING_GAMES.remove(game_id)
+                print("Game {}over!".format(game_id))
 
 
-def play_game(li, game_id, weights, threads):
+async def play_game(li, game_id, weights, threads):
     username = li.get_profile()["username"]
-    stream = li.get_game_stream(game_id)
-    updates = stream.iter_lines()
+    print(game_id)
+    is_first = True
+    buffer = b""
+    stream = await li.async_game_stream(game_id)
+    async for data, end_of_http_chunk in stream:
+        print(data)
+        buffer += data
+        if end_of_http_chunk:
+            print(buffer)
+            chunk = json.loads(buffer.decode('utf-8'))
+            print(chunk)
+            buffer = b""
+            if chunk and is_first:
+                is_first = False
+                #Initial response of stream will be the full game info. Store it
+                game_info = chunk
+                board = setup_board(game_info)
+                engine, info_handler = setup_engine(engine_path, board, weights, threads)
 
-    #Initial response of stream will be the full game info. Store it
-    game_info = json.loads(next(updates).decode('utf-8'))
-    board = setup_board(game_info)
-    engine, info_handler = setup_engine(engine_path, board, weights, threads)
+                # need to do this to check if its playing against SF.
+                # If Lichess Stockfish is playing response will contain:
+                # 'white':{'aiLevel': 6} or 'black':{'aiLevel': 6}
+                # instead of user info
+                is_white = False
+                if game_info.get("white").get("name"):
+                    is_white = (game_info.get("white")["name"] == username)
 
-    # need to do this to check if its playing against SF.
-    # If Lichess Stockfish is playing response will contain:
-    # 'white':{'aiLevel': 6} or 'black':{'aiLevel': 6}
-    # instead of user info
-    is_white = False
-    if game_info.get("white").get("name"):
-        is_white = (game_info.get("white")["name"] == username)
+                print("Game Info: {}".format(game_info))
 
-    print("Game Info: {}".format(game_info))
+                board = play_first_move(game_info, game_id, is_white, engine, board, li)
 
-    board = play_first_move(game_info, game_id, is_white, engine, board, li)
+            elif chunk:
+                state = chunk
+                print("Updated moves: {}".format(state))
+                moves = state.get("moves").split()
+                board = update_board(board, moves[-1])
 
-    for update in updates:
-        if update:
-            #board = process_update(board, engine, update, movetime, is_white)
-            upd = json.loads(update.decode('utf-8'))
-            print("Updated moves: {}".format(upd))
-            moves = upd.get("moves").split()
-            board = update_board(board, moves[-1])
+                if is_engine_move(is_white, moves):
+                    engine.position(board)
+                    best_move, ponder = engine.go(
+                        wtime=state.get("wtime"),
+                        btime=state.get("btime"),
+                        winc=state.get("winc"),
+                        binc=state.get("binc")
+                    )
+                    li.make_move(game_id, best_move)
 
-            if is_engine_move(is_white, moves):
-                engine.position(board)
-                best_move, ponder = engine.go(
-                    wtime=upd.get("wtime"),
-                    btime=upd.get("btime"),
-                    winc=upd.get("winc"),
-                    binc=upd.get("binc")
-                )
-                li.make_move(game_id, best_move)
-
-                print()
-                print("Engines best move: {}".format(best_move))
-                get_engine_stats(info_handler)
-
-    ONGOING_GAMES.remove(game_id)
-    print("Game over!")
+                    print()
+                    print("Engines best move: {}".format(best_move))
+                    get_engine_stats(info_handler)
 
 
 def can_accept_challenge(chlng):
@@ -193,6 +202,8 @@ if __name__ == "__main__":
     if is_bot:
         engine_path = os.path.join(CONFIG["engines_dir"], CONFIG["engine"])
         weights_path = os.path.join(CONFIG["engines_dir"], CONFIG["weights"]) if CONFIG["weights"] is not None else None
-        start(li, user_profile, engine_path, weights_path, CONFIG["threads"])
+        loop = asyncio.get_event_loop()
+        loop.run_until_complete(start(li, user_profile, engine_path, weights_path, CONFIG["threads"]))
+        loop.close()
     else:
         print("{} is not a bot account. Please upgrade your it to a bot account!".format(user_profile["username"]))

@@ -3,7 +3,7 @@ A bridge between [Lichess API](https://lichess.org/api#tag/Chess-Bot) and UCI bo
 
 
 ## How to Install
-- Make sure you run Python3 with `python --version`
+- Make sure you run Python3 >= 3.5, with `python --version`
 - Download the repo into lichess-uci-bot directory
 - Run `pip install -r requirements.txt`
 - Create your config file wih `cp config.yml.default config.yml`
