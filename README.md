@@ -3,6 +3,7 @@ A bridge between [Lichess API](https://lichess.org/api#tag/Chess-Bot) and UCI bo
 
 
 ## How to Install
+- Make sure you run Python3 with `python --version`
 - Download the repo into lichess-uci-bot directory
 - Run `pip install -r requirements.txt`
 - Create your config file wih `cp config.yml.default config.yml`
@@ -14,7 +15,7 @@ A bridge between [Lichess API](https://lichess.org/api#tag/Chess-Bot) and UCI bo
 - NOTE: If you have previously played games on an existing account, you will not be able to use it as a bot account
 - Once your account has been created and you are logged in, [create a personal OAuth2 token](https://lichess.org/account/oauth/token) with the "Play bot moves" selected and add a description
 - A `token` e.g. `Xb0ddNrLabc0lGK2` will be displayed. Store this in `config.yml` as the `token` field
-- NOTE: You won't see this token again on Lichess.
+- NOTE: You won't see this token again on Lichess
 
 
 ## Setup Engine
