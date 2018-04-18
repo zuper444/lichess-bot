@@ -74,6 +74,7 @@ class Lichess():
         url = urljoin(self.baseUrl, ENDPOINTS["stream"].format(game_id))
         async with aiohttp.ClientSession(headers=self.headers) as session:
             async with session.get(url) as resp:
+                print(resp.status)
                 return resp.content.iter_chunks()
 
 
