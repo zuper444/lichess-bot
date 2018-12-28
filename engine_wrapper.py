@@ -41,6 +41,9 @@ class EngineWrapper:
     def print_stats(self):
         pass
 
+    def ponder(self, board):
+        pass
+
     def name(self):
         return self.engine.name
 
@@ -69,6 +72,7 @@ class UCIEngine(EngineWrapper):
 
         self.engine = chess.uci.popen_engine(commands, stderr = subprocess.DEVNULL if silence_stderr else None)
         self.engine.uci()
+        self.is_ponder = False
 
         if options:
             self.engine.setoption(options)
@@ -103,8 +107,14 @@ class UCIEngine(EngineWrapper):
         )
         return best_move
 
+    def ponder(self, board):
+        self.is_ponder = True
+        self.engine.setoption({"UCI_Variant": type(board).uci_variant})
+        self.engine.position(board)
+        ponder = self.engine.go(infinite=True, async_callback=True)
 
     def stop(self):
+        self.is_ponder = False
         self.engine.stop()
 
 
