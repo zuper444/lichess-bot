@@ -1,12 +1,13 @@
 from time import time
 
 class Conversation():
-    def __init__(self, game, engine, xhr, version, challenge_queue):
+    def __init__(self, game, engine, xhr, version, challenge_queue, commands):
         self.game = game
         self.engine = engine
         self.xhr = xhr
         self.version = version
         self.challengers = challenge_queue
+        self._commands = commands
 
     command_prefix = "!"
 
@@ -37,6 +38,11 @@ class Conversation():
                 self.send_reply(line, "Challenge queue: {}".format(challengers))
             else:
                 self.send_reply(line, "No challenges queued.")
+        else:
+            for c in self._commands.keys():
+                if c == cmd:
+                    self.send_reply(line, self._commands(c))
+
 
     def send_reply(self, line, reply):
         self.xhr.chat(self.game.id, line.room, reply)
