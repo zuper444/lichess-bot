@@ -151,31 +151,32 @@ def play_game(li, game_id, control_queue, engine_factory, user_profile, config, 
         engine.set_time_control(game)
 
         for binary_chunk in lines:
-            upd = json.loads(binary_chunk.decode('utf-8')) if binary_chunk else None
-            u_type = upd["type"] if upd else "ping"
-            if u_type == "chatLine":
-                conversation.react(ChatLine(upd), game)
-            elif u_type == "gameState":
-                game.state = upd
-                moves = upd["moves"].split()
-                board = update_board(board, moves[-1])
-                if not board.is_game_over() and is_engine_move(game, moves):
-                    if config.get("fake_think_time") and len(moves) > 9:
-                        delay = min(game.clock_initial, game.my_remaining_seconds()) * 0.015
-                        accel = 1 - max(0, min(100, len(moves) - 20)) / 150
-                        sleep = min(5, delay * accel)
-                        time.sleep(sleep)
-                    best_move = None
-                    if polyglot_cfg.get("enabled") and len(moves) <= polyglot_cfg.get("max_depth", 8) * 2 - 1:
-                        best_move = get_book_move(board, book_cfg)
-                    if best_move == None:
-                        best_move = engine.search(board, upd["wtime"], upd["btime"], upd["winc"], upd["binc"])
-                    li.make_move(game.id, best_move)
-                    game.abort_in(config.get("abort_time", 20))
-            elif u_type == "ping":
-                if game.should_abort_now():
-                    logger.info("    Aborting {} by lack of activity".format(game.url()))
-                    li.abort(game.id)
+            if not game.ignore(config):
+                upd = json.loads(binary_chunk.decode('utf-8')) if binary_chunk else None
+                u_type = upd["type"] if upd else "ping"
+                if u_type == "chatLine":
+                    conversation.react(ChatLine(upd), game)
+                elif u_type == "gameState":
+                    game.state = upd
+                    moves = upd["moves"].split()
+                    board = update_board(board, moves[-1])
+                    if not board.is_game_over() and is_engine_move(game, moves):
+                        if config.get("fake_think_time") and len(moves) > 9:
+                            delay = min(game.clock_initial, game.my_remaining_seconds()) * 0.015
+                            accel = 1 - max(0, min(100, len(moves) - 20)) / 150
+                            sleep = min(5, delay * accel)
+                            time.sleep(sleep)
+                        best_move = None
+                        if polyglot_cfg.get("enabled") and len(moves) <= polyglot_cfg.get("max_depth", 8) * 2 - 1:
+                            best_move = get_book_move(board, book_cfg)
+                        if best_move == None:
+                            best_move = engine.search(board, upd["wtime"], upd["btime"], upd["winc"], upd["binc"])
+                        li.make_move(game.id, best_move)
+                        game.abort_in(config.get("abort_time", 20))
+                elif u_type == "ping":
+                    if game.should_abort_now():
+                        logger.info("    Aborting {} by lack of activity".format(game.url()))
+                        li.abort(game.id)
     except HTTPError as e:
         ongoing_games = li.get_ongoing_games()
         game_over = True

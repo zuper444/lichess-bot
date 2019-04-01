@@ -98,6 +98,9 @@ class Game():
         if (self.is_abortable()):
             self.abort_at = time.time() + seconds
 
+    def is_ignored(self, config):
+        return self.speed in config["challenge"].get("ignore", [])
+
     def should_abort_now(self):
         return self.is_abortable() and time.time() > self.abort_at
 
