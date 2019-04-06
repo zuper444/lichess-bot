@@ -2,6 +2,7 @@ import argparse
 import chess
 from chess.variant import find_variant
 import chess.polyglot
+import chess.pgn
 import engine_wrapper
 import model
 import json
@@ -129,7 +130,6 @@ def start(li, user_profile, engine_factory, config):
 def play_game(li, game_id, control_queue, engine_factory, user_profile, config, challenge_queue):
     response = li.get_game_stream(game_id)
     lines = response.iter_lines()
-
     #Initial response of stream will be the full game info. Store it
     game = model.Game(json.loads(next(lines).decode('utf-8')), user_profile["username"], li.baseUrl, config.get("abort_time", 20))
     board = setup_board(game)
@@ -141,6 +141,13 @@ def play_game(li, game_id, control_queue, engine_factory, user_profile, config, 
     engine_cfg = config["engine"]
     polyglot_cfg = engine_cfg.get("polyglot", {})
     book_cfg = polyglot_cfg.get("book", {})
+
+
+    game_pgn = chess.pgn.Game()
+    game_pgn.headers["Event"] = "{} vs {} - {}".format(game.white, game.black, game.id)
+    game_pgn.headers["Site"] = game.url()
+    game_pgn.headers["White"] = game.white
+    game_pgn.headers["Black"] = game.black
 
     try:
         if not polyglot_cfg.get("enabled") or not play_first_book_move(game, engine, board, li, book_cfg):
@@ -169,6 +176,8 @@ def play_game(li, game_id, control_queue, engine_factory, user_profile, config, 
                     if best_move == None:
                         best_move = engine.search(board, upd["wtime"], upd["btime"], upd["winc"], upd["binc"])
                     li.make_move(game.id, best_move)
+                    node = game_pgn.add_variation(best_move)
+                    node.add_line(moves=engine.get_principal_variation(), comment=engine.get_score())
                     game.abort_in(config.get("abort_time", 20))
             elif u_type == "ping":
                 if game.should_abort_now():
@@ -187,6 +196,10 @@ def play_game(li, game_id, control_queue, engine_factory, user_profile, config, 
         logger.error("Abandoning game due to connection error")
         traceback.print_exception(type(exception), exception, exception.__traceback__)
     finally:
+        exporter = chess.pgn.StringExporter(headers=True, variations=True, comments=True)
+        pgn_string = game_pgn.accept(exporter)
+        with open("test_pgn.txt", "w") as f:
+            f.write(pgn_string)
         logger.info("--- {} Game over".format(game.url()))
         engine.quit()
         # This can raise queue.NoFull, but that should only happen if we're not processing

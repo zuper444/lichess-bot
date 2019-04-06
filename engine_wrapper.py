@@ -115,6 +115,12 @@ class UCIEngine(EngineWrapper):
     def get_stats(self):
         return self.get_handler_stats(self.engine.info_handlers[0].info, ["depth", "nps", "nodes", "score"])
 
+    def get_principal_variation(self):
+        return self.get_handler_stats(self.engine.info_handlers[0].info, ["pv"])
+
+    def get_score(self):
+        return self.get_handler_stats(self.engine.info_handlers[0].info, ["score"])
+
 
 class XBoardEngine(EngineWrapper):
 
