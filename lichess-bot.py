@@ -142,18 +142,25 @@ def play_game(li, game_id, control_queue, engine_factory, user_profile, config, 
     polyglot_cfg = engine_cfg.get("polyglot", {})
     book_cfg = polyglot_cfg.get("book", {})
 
-
     game_pgn = chess.pgn.Game()
+    game_pgn.setup(board)
     game_pgn.headers["Event"] = "{} vs {} - {}".format(game.white, game.black, game.id)
     game_pgn.headers["Site"] = game.url()
     game_pgn.headers["White"] = game.white
     game_pgn.headers["Black"] = game.black
+    current_node = game_pgn
 
     try:
-        if not polyglot_cfg.get("enabled") or not play_first_book_move(game, engine, board, li, book_cfg):
-            play_first_move(game, engine, board, li)
-
         engine.set_time_control(game)
+        if not polyglot_cfg.get("enabled") or not play_first_book_move(game, engine, board, li, book_cfg):
+            moves = game.state["moves"].split()
+            if is_engine_move(game, moves):
+                # need to hardcode first movetime since Lichess has 30 sec limit.
+                best_move = engine.first_search(board, 10000)
+                current_node = current_node.add_main_variation(best_move)
+                li.make_move(game.id, best_move)
+            elif len(moves) > 0 and not is_engine_move(game, moves):
+                current_node = current_node.add_main_variation(chess.Move.from_uci(moves[-1]))
 
         for binary_chunk in lines:
             upd = json.loads(binary_chunk.decode('utf-8')) if binary_chunk else None
@@ -164,6 +171,7 @@ def play_game(li, game_id, control_queue, engine_factory, user_profile, config, 
                 game.state = upd
                 moves = upd["moves"].split()
                 board = update_board(board, moves[-1])
+
                 if not board.is_game_over() and is_engine_move(game, moves):
                     if config.get("fake_think_time") and len(moves) > 9:
                         delay = min(game.clock_initial, game.my_remaining_seconds()) * 0.015
@@ -175,15 +183,21 @@ def play_game(li, game_id, control_queue, engine_factory, user_profile, config, 
                         best_move = get_book_move(board, book_cfg)
                     if best_move == None:
                         best_move = engine.search(board, upd["wtime"], upd["btime"], upd["winc"], upd["binc"])
+
+                    current_node = current_node.add_main_variation(chess.Move.from_uci(moves[-1]))
                     li.make_move(game.id, best_move)
-                    node = game_pgn.add_variation(best_move)
-                    node.add_line(moves=engine.get_principal_variation(), comment=engine.get_score())
+                    next_node = current_node.add_main_variation(best_move)
+                    pv = engine.get_principal_variation()
+                    current_node.add_line(moves=pv, comment=json.dumps(engine.get_score()))
+                    current_node = next_node
                     game.abort_in(config.get("abort_time", 20))
             elif u_type == "ping":
                 if game.should_abort_now():
                     logger.info("    Aborting {} by lack of activity".format(game.url()))
                     li.abort(game.id)
     except HTTPError as e:
+        logger.error(e)
+        traceback.print_exception(type(e), e, e.__traceback__)
         ongoing_games = li.get_ongoing_games()
         game_over = True
         for ongoing_game in ongoing_games:
@@ -195,6 +209,9 @@ def play_game(li, game_id, control_queue, engine_factory, user_profile, config, 
     except (RemoteDisconnected, ChunkedEncodingError, ConnectionError, ProtocolError) as exception:
         logger.error("Abandoning game due to connection error")
         traceback.print_exception(type(exception), exception, exception.__traceback__)
+    except Exception as some_e:
+        logger.error(some_e)
+        traceback.print_exception(type(some_e), some_e, some_e.__traceback__)
     finally:
         exporter = chess.pgn.StringExporter(headers=True, variations=True, comments=True)
         pgn_string = game_pgn.accept(exporter)

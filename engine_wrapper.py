@@ -4,6 +4,11 @@ import chess.xboard
 import chess.uci
 import backoff
 import subprocess
+import logging
+
+import traceback
+
+logger = logging.getLogger(__name__)
 
 @backoff.on_exception(backoff.expo, BaseException, max_time=120)
 def create_engine(config, board):
@@ -60,6 +65,19 @@ class EngineWrapper:
 
         return stats_str
 
+    def get_stat(self, info, stat):
+        try:
+            if stat in info:
+                return info[stat]
+        except Exception as e:
+            logger.error("------------")
+            traceback.print_exception(type(e), e, e.__traceback__)
+            logger.error("------------")
+        return ""
+
+    def get_principal_variation(self):
+        pass
+
 
 class UCIEngine(EngineWrapper):
 
@@ -67,7 +85,7 @@ class UCIEngine(EngineWrapper):
         commands = commands[0] if len(commands) == 1 else commands
         self.go_commands = options.get("go_commands", {})
 
-        self.engine = chess.uci.popen_engine(commands, stderr = subprocess.DEVNULL if silence_stderr else None)
+        self.engine = chess.uci.popen_engine(commands, stderr=subprocess.DEVNULL if silence_stderr else None)
         self.engine.uci()
 
         if options:
@@ -116,10 +134,11 @@ class UCIEngine(EngineWrapper):
         return self.get_handler_stats(self.engine.info_handlers[0].info, ["depth", "nps", "nodes", "score"])
 
     def get_principal_variation(self):
-        return self.get_handler_stats(self.engine.info_handlers[0].info, ["pv"])
+        pv = self.engine.info_handlers[0].info["pv"][self.engine.info_handlers[0].info.get("multipv", 1)]
+        return pv
 
     def get_score(self):
-        return self.get_handler_stats(self.engine.info_handlers[0].info, ["score"])
+        return self.engine.info_handlers[0].info["score"]
 
 
 class XBoardEngine(EngineWrapper):
