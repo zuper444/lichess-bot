@@ -215,7 +215,8 @@ def play_game(li, game_id, control_queue, engine_factory, user_profile, config, 
     finally:
         exporter = chess.pgn.StringExporter(headers=True, variations=True, comments=True)
         pgn_string = game_pgn.accept(exporter)
-        with open("test_pgn.txt", "w") as f:
+        file_name = "{}vs{}-{}.txt".format(game.white, game.black, game.id)
+        with open(file_name, "w") as f:
             f.write(pgn_string)
         logger.info("--- {} Game over".format(game.url()))
         engine.quit()
